@@ -67,6 +67,7 @@ def main():
             return "Yes, you are!"
         else:
             return f"You say: {prompt}."
+
         
     # Chat function section (timing included inside function)
     def chat(prompt: str):
