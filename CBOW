@@ -1,0 +1,111 @@
+import streamlit as st
+import time
+from gensim.models import Word2Vec
+import numpy as np
+
+# Example sentences about pet personalities
+sentences = [
+    ["quiet", "calm", "independent"],
+    ["active", "outdoor", "energetic"],
+    ["kids", "friendly", "playful"],
+    ["first", "pet", "easy"],
+    ["apartment", "quiet", "small"],
+]
+
+# Train a Skip-gram Word2Vec model
+model = Word2Vec(
+    sentences,
+    vector_size=50,
+    window=3,
+    min_count=1,
+    sg=0,  # <-- CBOW mode
+    workers=2,
+    seed=42
+)
+
+# Pet profiles (keywords mapped to words from the sentences)
+pet_profiles = {
+    "Charlie the senior cat": ["quiet", "independent"],
+    "Luna the gentle rabbit": ["quiet", "easy"],
+    "Buddy the energetic dog": ["active", "outdoor"],
+    "Daisy the playful kitten": ["friendly", "playful"],
+}
+
+user_name = "Jane"
+user_image = "https://github.com/PingchenHuang2000/pet_adoption_userimage/blob/main/pet-care.png?raw=true"
+placeholderstr = "Hi there!! Tell me about your lifestyle or what kind of pet you're looking for."
+
+def stream_data(stream_str):
+    for word in stream_str.split(" "):
+        yield word + " "
+        time.sleep(0.05)
+
+def get_sentence_vector(words):
+    vectors = []
+    for word in words:
+        if word in model.wv:
+            vectors.append(model.wv[word])
+    if vectors:
+        return np.mean(vectors, axis=0)
+    else:
+        return np.zeros(model.vector_size)
+
+def generate_response(prompt):
+    prompt_words = prompt.lower().split()
+    user_vec = get_sentence_vector(prompt_words)
+
+    best_pet = None
+    best_score = -np.inf
+    for pet_name, keywords in pet_profiles.items():
+        pet_vec = get_sentence_vector(keywords)
+        if np.linalg.norm(user_vec) == 0 or np.linalg.norm(pet_vec) == 0:
+            continue
+        score = np.dot(user_vec, pet_vec) / (np.linalg.norm(user_vec) * np.linalg.norm(pet_vec))
+        if score > best_score:
+            best_score = score
+            best_pet = pet_name
+
+    if best_pet:
+        return f"Based on what you shared, I recommend **{best_pet}**! 🐾"
+    else:
+        return "Tell me more about your lifestyle or what you're looking for in a pet!"
+
+def main():
+    st.set_page_config(
+        page_title='Pet Adoption Advisor Chatbot',
+        layout='wide',
+        initial_sidebar_state='auto',
+        page_icon="🐾"
+    )
+
+    st.title(f"🐾 {user_name}'s Pet Adoption Chatbot")
+
+    with st.sidebar:
+        st.selectbox("Language", ["English", "繁體中文"], index=0)
+        st.image(user_image, width=100)
+        st.write("Welcome to the Pet Adoption Advisor! 🐶🐱🐰")
+
+    st_c_chat = st.container(border=True)
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    else:
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st_c_chat.chat_message("user", avatar=user_image).markdown(msg["content"])
+            else:
+                st_c_chat.chat_message("assistant").markdown(msg["content"])
+
+    def chat(prompt: str):
+        st_c_chat.chat_message("user", avatar=user_image).write(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        response = generate_response(prompt)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st_c_chat.chat_message("assistant").write_stream(stream_data(response))
+
+    if prompt := st.chat_input(placeholder=placeholderstr):
+        chat(prompt)
+
+if __name__ == "__main__":
+    main()
